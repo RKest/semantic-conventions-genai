@@ -581,7 +581,7 @@ a manager LLM that routes between agents), ending when the framework releases co
 back to the caller. On `handle_turn`, `gen_ai.agent.name` or `gen_ai.workflow.name`
 identifies the entry-point agent or workflow that first takes control in the framework.
 Instrumentations MAY provide a configuration option to disable reporting the `handle_turn`
-span.
+span; the `handle_turn` data point of `gen_ai.invocation.duration` is still recorded.
 
 Instrumentations SHOULD propagate an in-process OpenTelemetry context key when a turn begins
 to guarantee that a `handle_turn` span is never parented (directly or indirectly) by another
@@ -603,11 +603,7 @@ invocation.
 
 Instrumentations can distinguish framework-defined multi-agent orchestration from
 application-defined workflows at runtime from library state (for example, `crew.process`, or
-the builder or orchestration type that produced the graph or `Workflow`). If the
-instrumentation can reliably determine that a turn will be handled by a single root
-invocation (with no peer handoffs at the root level, for example when an ADK `Runner`
-executes a root `Workflow`), it MAY omit the child `invoke_workflow` or `invoke_agent` span
-for that root entity and enrich the `handle_turn` span with its attributes instead.
+the builder or orchestration type that produced the graph or `Workflow`).
 Framework-specific semantic conventions SHOULD specify which entrypoints report
 `handle_turn`, `invoke_workflow`, or `invoke_agent`.
 
@@ -626,7 +622,7 @@ Examples of `handle_turn` operations include:
 **Workflow (`invoke_workflow`)**:
 Reported for application-defined workflow invocations at any nesting depth (both when an
 application-defined workflow is the direct framework entrypoint and when it is invoked inside
-a `handle_turn` or parent workflow, unless coalesced into `handle_turn` as described above).
+a `handle_turn` or parent workflow).
 An `invoke_workflow` span SHOULD NOT be reported when the workflow is an internal
 implementation detail of another operation or a framework-defined multi-agent pattern rather
 than an application-defined workflow.

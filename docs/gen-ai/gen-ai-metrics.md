@@ -603,10 +603,10 @@ SHOULD be used instead.
 When this metric is reported alongside a `gen_ai.invocation.internal`
 span, the metric value SHOULD be the same as the span duration.
 Instrumentations MAY provide a configuration option to disable reporting
-the `handle_turn` span and its corresponding `gen_ai.invocation.duration`
-data point (in which case the top-level `invoke_workflow` or
-`invoke_agent` invocation in the process has
-`gen_ai.invocation.is_nested` set to `false`).
+the `handle_turn` span. This option SHOULD NOT disable the `handle_turn`
+data point of this metric: in a handoff, several top-level peer
+invocations would otherwise each report `gen_ai.invocation.is_nested`
+set to `false` for the same turn.
 
 **Requirement level:** [Recommended](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/general/signal-requirement-level.md).
 
@@ -651,7 +651,7 @@ available for a given framework, this attribute MUST NOT be captured by default.
 Semantic conventions for individual Generative AI frameworks SHOULD document
 what `gen_ai.workflow.name` means in the context of that framework.
 
-**[7] `gen_ai.request.model`:** This attribute SHOULD be populated if and only if the instrumented library allows to set only a single model per agent. It SHOULD NOT be populated for workflows or for agents that support multiple models or dynamic selection.
+**[7] `gen_ai.request.model`:** This attribute SHOULD be populated if and only if the instrumented library allows to set only a single model per agent. It SHOULD NOT be populated for `handle_turn`, for workflows, or for agents that support multiple models or dynamic selection.
 
 ---
 
