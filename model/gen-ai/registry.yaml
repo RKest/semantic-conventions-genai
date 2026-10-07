@@ -1094,14 +1094,13 @@ attributes:
   - key: gen_ai.invocation.is_nested
     type: boolean
     brief: >
-      Indicates whether an in-process GenAI invocation (`handle_turn`,
-      `invoke_workflow`, or `invoke_agent`) is nested within another
-      in-process invocation.
+      Whether an in-process GenAI invocation is nested within another
+      in-process GenAI invocation.
     note: |
-      Set to `true` for nested emissions of `gen_ai.invocation.duration` (for
-      example, a child `invoke_agent` or `invoke_workflow` invoked inside a
-      `handle_turn`, `invoke_workflow`, or parent `invoke_agent` in the same
-      process), and `false` for the top-level (root) invocation of a turn.
+      `false` on the root invocation of a turn in the process: `handle_turn`, or
+      the top-level `invoke_workflow` or `invoke_agent` when the framework
+      entrypoint is an application-defined workflow or a single agent. `true`
+      on every invocation nested inside another in-process invocation.
     examples: [false, true]
     stability: development
   - key: gen_ai.skill.name

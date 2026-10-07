@@ -125,40 +125,27 @@ metrics:
       The end-to-end duration of an in-process GenAI turn, workflow, or agent
       invocation.
     note: |
-      Measured from the moment the turn, workflow, or agent invocation starts
-      until it emits the last chunk of its final response, releases control
-      flow back to its caller, or terminates with an error.
+      Measured from the moment the invocation starts until it emits the last
+      chunk of its final response, releases control flow back to its caller,
+      or terminates with an error. When reported alongside a
+      `gen_ai.invocation.internal` span, the value SHOULD be the same as the
+      span duration.
 
-      Recorded for every `gen_ai.invocation.internal` operation (`handle_turn`,
-      `invoke_workflow`, and `invoke_agent`) at any nesting depth. Values are
-      inclusive of nested work:
+      Recorded for every `gen_ai.invocation.internal` operation at any nesting
+      depth; values include nested work. Filter by
+      `gen_ai.invocation.is_nested = false` for end-to-end turn latency, and by
+      `gen_ai.operation.name` with `gen_ai.agent.name` or
+      `gen_ai.workflow.name` for individual agents and workflows.
 
-      - Set `gen_ai.invocation.is_nested` to `false` on the top-level (root)
-        invocation of a turn in the process (`handle_turn`, or the top-level
-        `invoke_workflow` / `invoke_agent` when the framework entrypoint is an
-        application-defined workflow or a single agent). Filtering by
-        `gen_ai.invocation.is_nested = false` gives the system-level
-        end-to-end turn latency across all framework architectures without
-        double-counting nested invocations.
-      - Set `gen_ai.invocation.is_nested` to `true` on every nested invocation
-        in the same process (such as a child `invoke_agent` or
-        `invoke_workflow` inside a `handle_turn`, `invoke_workflow`, or parent
-        `invoke_agent`). Consumers analyzing individual agents or workflows
-        SHOULD filter by `gen_ai.operation.name` and `gen_ai.agent.name` or
-        `gen_ai.workflow.name`.
+      Disabling the `handle_turn` span SHOULD NOT disable its data point of
+      this metric: in a handoff, several top-level peer invocations would
+      otherwise each report `gen_ai.invocation.is_nested` set to `false` for
+      the same turn.
 
       If instrumentation can only measure a single provider-facing client
       operation (for example, one model API call),
-      `gen_ai.client.operation.duration` or `gen_ai.client.inference.duration`
+      `gen_ai.client.inference.duration` or `gen_ai.client.operation.duration`
       SHOULD be used instead.
-
-      When this metric is reported alongside a `gen_ai.invocation.internal`
-      span, the metric value SHOULD be the same as the span duration.
-      Instrumentations MAY provide a configuration option to disable reporting
-      the `handle_turn` span. This option SHOULD NOT disable the `handle_turn`
-      data point of this metric: in a handoff, several top-level peer
-      invocations would otherwise each report `gen_ai.invocation.is_nested`
-      set to `false` for the same turn.
     instrument: histogram
     unit: "s"
     stability: development

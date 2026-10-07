@@ -556,58 +556,36 @@ Describes an in-process GenAI turn, workflow, or agent invocation.
 
 The `gen_ai.operation.name` SHOULD be one of:
 
-- `handle_turn`: Orchestration and execution of a single turn of a GenAI system (one exchange
-  with the caller: input in, response out), spanning from when the agentic framework takes
-  control flow until it releases control flow back to its caller.
-- `invoke_workflow`: Orchestration and execution of a GenAI system through an
-  application-defined control flow between steps (for example, an application-defined
-  LangGraph [`StateGraph`](https://reference.langchain.com/python/langgraph/graphs),
-  Microsoft Agent Framework [`Workflow`](https://learn.microsoft.com/agent-framework/workflows/)
-  built with `WorkflowBuilder` edges, CrewAI [`Crew`](https://docs.crewai.com/concepts/crews)
-  with `Process.sequential` or [`Flow`](https://docs.crewai.com/concepts/flows), and ADK
-  `Workflow`).
-- `invoke_agent`: Orchestration and execution of a single LLM-steered GenAI agent
-  (for example, LangChain [`create_agent`](https://docs.langchain.com/oss/python/langchain/agents),
-  OpenAI Agents [`Agent`](https://openai.github.io/openai-agents-python/agents/), CrewAI
+- `handle_turn`: one turn of a GenAI system, that is, one exchange with the caller (input
+  in, response out). Reported at a framework entrypoint that is a runner distinct from the
+  agents it runs, or where the framework defines the control flow between agents and an LLM
+  steers it (handoffs, transfers, swarms, or a manager LLM that routes). It starts when the
+  framework takes control flow and ends when the framework releases it back to the caller.
+  `gen_ai.agent.name` or `gen_ai.workflow.name` identifies the entry-point agent or workflow.
+- `invoke_workflow`: an application-defined control flow between steps, at any nesting depth
+  (for example, an application-defined LangGraph
+  [`StateGraph`](https://reference.langchain.com/python/langgraph/graphs), Microsoft Agent
+  Framework [`Workflow`](https://learn.microsoft.com/agent-framework/workflows/) built with
+  `WorkflowBuilder` edges, CrewAI [`Crew`](https://docs.crewai.com/concepts/crews) with
+  `Process.sequential` or [`Flow`](https://docs.crewai.com/concepts/flows), and ADK
+  `Workflow`). It SHOULD NOT be reported when the workflow is an internal implementation
+  detail of another operation or a framework-defined multi-agent pattern.
+- `invoke_agent`: a single LLM-steered agent, at any nesting depth (for example, LangChain
+  [`create_agent`](https://docs.langchain.com/oss/python/langchain/agents), OpenAI Agents
+  [`Agent`](https://openai.github.io/openai-agents-python/agents/), CrewAI
   [`Agent`](https://docs.crewai.com/concepts/agents), Microsoft Agent Framework
   [`Agent`](https://learn.microsoft.com/agent-framework/), Pydantic AI `Agent`, and ADK
   [`LlmAgent`](https://adk.dev/agents/llm-agents/)).
 
-**Turn (`handle_turn`)**:
-A turn is one exchange with the caller: input in, response out. The `handle_turn` span is
-reported for framework entrypoints that orchestrate execution or where the framework defines
-the control flow between agents and an LLM steers it (such as handoffs, transfers, swarms, or
-a manager LLM that routes between agents), ending when the framework releases control flow
-back to the caller. On `handle_turn`, `gen_ai.agent.name` or `gen_ai.workflow.name`
-identifies the entry-point agent or workflow that first takes control in the framework.
-Instrumentations MAY provide a configuration option to disable reporting the `handle_turn`
-span; the `handle_turn` data point of `gen_ai.invocation.duration` is still recorded.
+When the framework entrypoint is itself an application-defined workflow or a single agent, a
+separate `handle_turn` span SHOULD NOT be reported; the top-level `invoke_workflow` or
+`invoke_agent` span represents the turn. Instrumentations can tell framework-defined
+multi-agent patterns from application-defined workflows using library state (for example,
+`crew.process`, or the builder or orchestration type that produced the graph or `Workflow`).
+Framework-specific semantic conventions SHOULD specify which entrypoints report each
+operation.
 
-Instrumentations SHOULD propagate an in-process OpenTelemetry context key when a turn begins
-to guarantee that a `handle_turn` span is never parented (directly or indirectly) by another
-`handle_turn` span within the same process (for example, when a framework entrypoint is
-invoked inside a tool or workflow step, such as OpenAI Agents `Agent.as_tool()`, ADK
-`AgentTool`, or an ADK runner invoked inside a LangGraph node). Cross-process propagation of
-turn state is out of scope.
-
-When the framework entrypoint *is* an application-defined workflow or a single agent (for
-example, an application-defined LangGraph
-[`StateGraph.invoke(...)`](https://reference.langchain.com/python/langgraph/graphs) or
-LangChain `agent.invoke(...)`, Microsoft Agent Framework
-[`Workflow.run(...)`](https://learn.microsoft.com/agent-framework/workflows/) or
-`Agent.run(...)`, CrewAI [`Crew.kickoff()`](https://docs.crewai.com/concepts/crews) with
-`Process.sequential` or [`Flow.kickoff()`](https://docs.crewai.com/concepts/flows), or
-Pydantic AI `Agent.run(...)`), a separate `handle_turn` span SHOULD NOT be reported; the
-top-level `invoke_workflow` or `invoke_agent` span already represents the entrypoint
-invocation.
-
-Instrumentations can distinguish framework-defined multi-agent orchestration from
-application-defined workflows at runtime from library state (for example, `crew.process`, or
-the builder or orchestration type that produced the graph or `Workflow`).
-Framework-specific semantic conventions SHOULD specify which entrypoints report
-`handle_turn`, `invoke_workflow`, or `invoke_agent`.
-
-Examples of `handle_turn` operations include:
+Examples of `handle_turn` operations:
 
 - **ADK**: [`Runner.run(...)`](https://adk.dev/runtime/) / `Runner.run_async(...)`
 - **OpenAI Agents**: one [`Runner.run(starting_agent=...)`](https://openai.github.io/openai-agents-python/ref/run/#agents.run.Runner.run)
@@ -619,22 +597,20 @@ Examples of `handle_turn` operations include:
 - **CrewAI**: `Crew(..., process=Process.hierarchical).kickoff()`
 - **AutoGen**: `Swarm([...]).run(...)`
 
-**Workflow (`invoke_workflow`)**:
-Reported for application-defined workflow invocations at any nesting depth (both when an
-application-defined workflow is the direct framework entrypoint and when it is invoked inside
-a `handle_turn` or parent workflow).
-An `invoke_workflow` span SHOULD NOT be reported when the workflow is an internal
-implementation detail of another operation or a framework-defined multi-agent pattern rather
-than an application-defined workflow.
+Instrumentations SHOULD propagate an in-process OpenTelemetry context key when a turn begins
+so that a `handle_turn` span is never parented (directly or indirectly) by another
+`handle_turn` span in the same process (for example, a framework entrypoint invoked inside a
+tool or workflow step, such as OpenAI Agents `Agent.as_tool()`, ADK `AgentTool`, or an ADK
+runner invoked inside a LangGraph node). Cross-process propagation of turn state is out of
+scope.
 
-**Agent (`invoke_agent`)**:
-Reported for every in-process LLM-steered agent invocation at any nesting depth.
+Instrumentations MAY provide a configuration option to disable reporting the `handle_turn`
+span; its `gen_ai.invocation.duration` data point is still recorded.
 
 **Span name** SHOULD be `{gen_ai.operation.name} {gen_ai.agent.name}` or
-`{gen_ai.operation.name} {gen_ai.workflow.name}`, depending on whether an agent or a
-workflow is being invoked (or for `handle_turn`, whichever is the entry point that first
-receives control in the framework). When neither name is readily available, the span name
-SHOULD be `{gen_ai.operation.name}`.
+`{gen_ai.operation.name} {gen_ai.workflow.name}`, naming the invoked agent or workflow
+(for `handle_turn`, the entry-point one). When neither name is readily available, the
+span name SHOULD be `{gen_ai.operation.name}`.
 Semantic conventions for individual GenAI systems and frameworks MAY specify a different
 span name format.
 

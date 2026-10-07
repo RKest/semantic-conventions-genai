@@ -573,40 +573,27 @@ This metric SHOULD be specified with [ExplicitBucketBoundaries] of
 | -------- | --------------- | ----------- | -------------- | --------- | ------ |
 | `gen_ai.invocation.duration` | Histogram | `s` | The end-to-end duration of an in-process GenAI turn, workflow, or agent invocation. [1] | ![Development](https://img.shields.io/badge/-development-blue) | |
 
-**[1]:** Measured from the moment the turn, workflow, or agent invocation starts
-until it emits the last chunk of its final response, releases control
-flow back to its caller, or terminates with an error.
+**[1]:** Measured from the moment the invocation starts until it emits the last
+chunk of its final response, releases control flow back to its caller,
+or terminates with an error. When reported alongside a
+`gen_ai.invocation.internal` span, the value SHOULD be the same as the
+span duration.
 
-Recorded for every `gen_ai.invocation.internal` operation (`handle_turn`,
-`invoke_workflow`, and `invoke_agent`) at any nesting depth. Values are
-inclusive of nested work:
+Recorded for every `gen_ai.invocation.internal` operation at any nesting
+depth; values include nested work. Filter by
+`gen_ai.invocation.is_nested = false` for end-to-end turn latency, and by
+`gen_ai.operation.name` with `gen_ai.agent.name` or
+`gen_ai.workflow.name` for individual agents and workflows.
 
-- Set `gen_ai.invocation.is_nested` to `false` on the top-level (root)
-  invocation of a turn in the process (`handle_turn`, or the top-level
-  `invoke_workflow` / `invoke_agent` when the framework entrypoint is an
-  application-defined workflow or a single agent). Filtering by
-  `gen_ai.invocation.is_nested = false` gives the system-level
-  end-to-end turn latency across all framework architectures without
-  double-counting nested invocations.
-- Set `gen_ai.invocation.is_nested` to `true` on every nested invocation
-  in the same process (such as a child `invoke_agent` or
-  `invoke_workflow` inside a `handle_turn`, `invoke_workflow`, or parent
-  `invoke_agent`). Consumers analyzing individual agents or workflows
-  SHOULD filter by `gen_ai.operation.name` and `gen_ai.agent.name` or
-  `gen_ai.workflow.name`.
+Disabling the `handle_turn` span SHOULD NOT disable its data point of
+this metric: in a handoff, several top-level peer invocations would
+otherwise each report `gen_ai.invocation.is_nested` set to `false` for
+the same turn.
 
 If instrumentation can only measure a single provider-facing client
 operation (for example, one model API call),
-`gen_ai.client.operation.duration` or `gen_ai.client.inference.duration`
+`gen_ai.client.inference.duration` or `gen_ai.client.operation.duration`
 SHOULD be used instead.
-
-When this metric is reported alongside a `gen_ai.invocation.internal`
-span, the metric value SHOULD be the same as the span duration.
-Instrumentations MAY provide a configuration option to disable reporting
-the `handle_turn` span. This option SHOULD NOT disable the `handle_turn`
-data point of this metric: in a handoff, several top-level peer
-invocations would otherwise each report `gen_ai.invocation.is_nested`
-set to `false` for the same turn.
 
 **Requirement level:** [Recommended](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/general/signal-requirement-level.md).
 
@@ -614,17 +601,17 @@ set to `false` for the same turn.
 
 | Key | Stability | [Requirement Level](https://opentelemetry.io/docs/specs/semconv/general/attribute-requirement-level/) | Value Type | Description | Example Values |
 | --- | --- | --- | --- | --- | --- |
-| [`gen_ai.invocation.is_nested`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Required` | boolean | Indicates whether an in-process GenAI invocation (`handle_turn`, `invoke_workflow`, or `invoke_agent`) is nested within another in-process invocation. [1] | `false`; `true` |
+| [`gen_ai.invocation.is_nested`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Required` | boolean | Whether an in-process GenAI invocation is nested within another in-process GenAI invocation. [1] | `false`; `true` |
 | [`gen_ai.operation.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Required` | string | The name of the operation being performed. [2] | `chat`; `generate_content`; `text_completion` |
 | [`error.type`](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/registry/attributes/error.md) | ![Stable](https://img.shields.io/badge/-stable-lightgreen) | `Conditionally Required` If the operation ended in an error. | string | Describes a class of error the operation ended with. [3] | `timeout`; `java.net.UnknownHostException`; `server_certificate_invalid`; `500` |
 | [`gen_ai.agent.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [4] | string | The human-readable name of the invoked GenAI agent, or the entry-point agent when `gen_ai.operation.name` is `handle_turn`. | `Math Tutor`; `Fiction Writer` |
 | [`gen_ai.workflow.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [5] | string | Human-readable name of the GenAI workflow provided by the application. [6] | `multi_agent_rag`; `customer_support_pipeline` |
 | [`gen_ai.request.model`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` If applicable. | string | The name of the GenAI model configured for the agent. [7] | `gpt-4` |
 
-**[1] `gen_ai.invocation.is_nested`:** Set to `true` for nested emissions of `gen_ai.invocation.duration` (for
-example, a child `invoke_agent` or `invoke_workflow` invoked inside a
-`handle_turn`, `invoke_workflow`, or parent `invoke_agent` in the same
-process), and `false` for the top-level (root) invocation of a turn.
+**[1] `gen_ai.invocation.is_nested`:** `false` on the root invocation of a turn in the process: `handle_turn`, or
+the top-level `invoke_workflow` or `invoke_agent` when the framework
+entrypoint is an application-defined workflow or a single agent. `true`
+on every invocation nested inside another in-process invocation.
 
 **[2] `gen_ai.operation.name`:** If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.
 
