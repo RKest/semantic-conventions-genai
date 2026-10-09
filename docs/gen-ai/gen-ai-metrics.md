@@ -131,7 +131,7 @@ applicable `aws.bedrock.*` attributes and are not expected to include
 | `execute_tool` | Execute a tool | ![Development](https://img.shields.io/badge/-development-blue) |
 | `fetch_response` | Fetch a previously generated model response by its identifier, without performing inference, such as [OpenAI Get a model response](https://platform.openai.com/docs/api-reference/responses/get) [8] | ![Development](https://img.shields.io/badge/-development-blue) |
 | `generate_content` | Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content) | ![Development](https://img.shields.io/badge/-development-blue) |
-| `handle_turn` | Handle one turn of a GenAI system, from when the agentic framework takes control flow until it releases control flow back to the caller | ![Development](https://img.shields.io/badge/-development-blue) |
+| `handle_conversation_turn` | Handle one conversation turn of a GenAI system, while the framework steers the control flow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_agent` | Invoke GenAI agent | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_workflow` | Invoke GenAI workflow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `plan` | Agent planning or task decomposition phase | ![Development](https://img.shields.io/badge/-development-blue) |
@@ -266,7 +266,7 @@ Instrumentations SHOULD document the list of errors they report.
 | `execute_tool` | Execute a tool | ![Development](https://img.shields.io/badge/-development-blue) |
 | `fetch_response` | Fetch a previously generated model response by its identifier, without performing inference, such as [OpenAI Get a model response](https://platform.openai.com/docs/api-reference/responses/get) [7] | ![Development](https://img.shields.io/badge/-development-blue) |
 | `generate_content` | Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content) | ![Development](https://img.shields.io/badge/-development-blue) |
-| `handle_turn` | Handle one turn of a GenAI system, from when the agentic framework takes control flow until it releases control flow back to the caller | ![Development](https://img.shields.io/badge/-development-blue) |
+| `handle_conversation_turn` | Handle one conversation turn of a GenAI system, while the framework steers the control flow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_agent` | Invoke GenAI agent | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_workflow` | Invoke GenAI workflow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `plan` | Agent planning or task decomposition phase | ![Development](https://img.shields.io/badge/-development-blue) |
@@ -388,7 +388,7 @@ applicable `aws.bedrock.*` attributes and are not expected to include
 | `execute_tool` | Execute a tool | ![Development](https://img.shields.io/badge/-development-blue) |
 | `fetch_response` | Fetch a previously generated model response by its identifier, without performing inference, such as [OpenAI Get a model response](https://platform.openai.com/docs/api-reference/responses/get) [6] | ![Development](https://img.shields.io/badge/-development-blue) |
 | `generate_content` | Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content) | ![Development](https://img.shields.io/badge/-development-blue) |
-| `handle_turn` | Handle one turn of a GenAI system, from when the agentic framework takes control flow until it releases control flow back to the caller | ![Development](https://img.shields.io/badge/-development-blue) |
+| `handle_conversation_turn` | Handle one conversation turn of a GenAI system, while the framework steers the control flow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_agent` | Invoke GenAI agent | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_workflow` | Invoke GenAI workflow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `plan` | Agent planning or task decomposition phase | ![Development](https://img.shields.io/badge/-development-blue) |
@@ -509,7 +509,7 @@ applicable `aws.bedrock.*` attributes and are not expected to include
 | `execute_tool` | Execute a tool | ![Development](https://img.shields.io/badge/-development-blue) |
 | `fetch_response` | Fetch a previously generated model response by its identifier, without performing inference, such as [OpenAI Get a model response](https://platform.openai.com/docs/api-reference/responses/get) [6] | ![Development](https://img.shields.io/badge/-development-blue) |
 | `generate_content` | Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content) | ![Development](https://img.shields.io/badge/-development-blue) |
-| `handle_turn` | Handle one turn of a GenAI system, from when the agentic framework takes control flow until it releases control flow back to the caller | ![Development](https://img.shields.io/badge/-development-blue) |
+| `handle_conversation_turn` | Handle one conversation turn of a GenAI system, while the framework steers the control flow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_agent` | Invoke GenAI agent | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_workflow` | Invoke GenAI workflow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `plan` | Agent planning or task decomposition phase | ![Development](https://img.shields.io/badge/-development-blue) |
@@ -571,7 +571,7 @@ This metric SHOULD be specified with [ExplicitBucketBoundaries] of
 
 | Name | Instrument Type | Unit (UCUM) | Description | Stability | Entity Associations |
 | -------- | --------------- | ----------- | -------------- | --------- | ------ |
-| `gen_ai.invocation.duration` | Histogram | `s` | The end-to-end duration of an in-process GenAI turn, workflow, or agent invocation. [1] | ![Development](https://img.shields.io/badge/-development-blue) | |
+| `gen_ai.invocation.duration` | Histogram | `s` | The end-to-end duration of an in-process GenAI conversation turn, workflow, or agent invocation. [1] | ![Development](https://img.shields.io/badge/-development-blue) | |
 
 **[1]:** Measured from the moment the invocation starts until it emits the last
 chunk of its final response, releases control flow back to its caller,
@@ -585,10 +585,10 @@ depth; values include nested work. Filter by
 `gen_ai.operation.name` with `gen_ai.agent.name` or
 `gen_ai.workflow.name` for individual agents and workflows.
 
-Disabling the `handle_turn` span SHOULD NOT disable its data point of
-this metric: in a handoff, several top-level peer invocations would
-otherwise each report `gen_ai.invocation.is_nested` set to `false` for
-the same turn.
+Disabling the `handle_conversation_turn` span SHOULD NOT disable its
+data point of this metric: in a handoff, several top-level peer
+invocations would otherwise each report `gen_ai.invocation.is_nested`
+set to `false` for the same turn.
 
 If instrumentation can only measure a single provider-facing client
 operation (for example, one model API call),
@@ -604,14 +604,14 @@ SHOULD be used instead.
 | [`gen_ai.invocation.is_nested`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Required` | boolean | Whether an in-process GenAI invocation is nested within another in-process GenAI invocation. [1] | `false`; `true` |
 | [`gen_ai.operation.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Required` | string | The name of the operation being performed. [2] | `chat`; `generate_content`; `text_completion` |
 | [`error.type`](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/registry/attributes/error.md) | ![Stable](https://img.shields.io/badge/-stable-lightgreen) | `Conditionally Required` If the operation ended in an error. | string | Describes a class of error the operation ended with. [3] | `timeout`; `java.net.UnknownHostException`; `server_certificate_invalid`; `500` |
-| [`gen_ai.agent.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [4] | string | The human-readable name of the invoked GenAI agent, or the entry-point agent when `gen_ai.operation.name` is `handle_turn`. | `Math Tutor`; `Fiction Writer` |
+| [`gen_ai.agent.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [4] | string | The human-readable name of the invoked GenAI agent, or the entry-point agent when `gen_ai.operation.name` is `handle_conversation_turn`. | `Math Tutor`; `Fiction Writer` |
 | [`gen_ai.workflow.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [5] | string | Human-readable name of the GenAI workflow provided by the application. [6] | `multi_agent_rag`; `customer_support_pipeline` |
 | [`gen_ai.request.model`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` If applicable. | string | The name of the GenAI model configured for the agent. [7] | `gpt-4` |
 
-**[1] `gen_ai.invocation.is_nested`:** `false` on the root invocation of a turn in the process: `handle_turn`, or
-the top-level `invoke_workflow` or `invoke_agent` when the framework
-entrypoint is an application-defined workflow or a single agent. `true`
-on every invocation nested inside another in-process invocation.
+**[1] `gen_ai.invocation.is_nested`:** `false` on the root invocation of a turn in the process: the
+`handle_conversation_turn` invocation when reported, otherwise the
+top-level `invoke_workflow` or `invoke_agent` invocation. `true` on every
+invocation nested inside another in-process invocation.
 
 **[2] `gen_ai.operation.name`:** If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.
 
@@ -638,7 +638,7 @@ available for a given framework, this attribute MUST NOT be captured by default.
 Semantic conventions for individual Generative AI frameworks SHOULD document
 what `gen_ai.workflow.name` means in the context of that framework.
 
-**[7] `gen_ai.request.model`:** This attribute SHOULD be populated if and only if the instrumented library allows to set only a single model per agent. It SHOULD NOT be populated for `handle_turn`, for workflows, or for agents that support multiple models or dynamic selection.
+**[7] `gen_ai.request.model`:** This attribute SHOULD be populated if and only if the instrumented library allows to set only a single model per agent. It SHOULD NOT be populated for `handle_conversation_turn`, for workflows, or for agents that support multiple models or dynamic selection.
 
 ---
 
@@ -664,7 +664,7 @@ what `gen_ai.workflow.name` means in the context of that framework.
 | `execute_tool` | Execute a tool | ![Development](https://img.shields.io/badge/-development-blue) |
 | `fetch_response` | Fetch a previously generated model response by its identifier, without performing inference, such as [OpenAI Get a model response](https://platform.openai.com/docs/api-reference/responses/get) [8] | ![Development](https://img.shields.io/badge/-development-blue) |
 | `generate_content` | Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content) | ![Development](https://img.shields.io/badge/-development-blue) |
-| `handle_turn` | Handle one turn of a GenAI system, from when the agentic framework takes control flow until it releases control flow back to the caller | ![Development](https://img.shields.io/badge/-development-blue) |
+| `handle_conversation_turn` | Handle one conversation turn of a GenAI system, while the framework steers the control flow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_agent` | Invoke GenAI agent | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_workflow` | Invoke GenAI workflow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `plan` | Agent planning or task decomposition phase | ![Development](https://img.shields.io/badge/-development-blue) |

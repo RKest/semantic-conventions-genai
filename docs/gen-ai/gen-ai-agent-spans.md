@@ -141,7 +141,7 @@ and SHOULD be provided **at span creation time** (if provided at all):
 | `execute_tool` | Execute a tool | ![Development](https://img.shields.io/badge/-development-blue) |
 | `fetch_response` | Fetch a previously generated model response by its identifier, without performing inference, such as [OpenAI Get a model response](https://platform.openai.com/docs/api-reference/responses/get) [9] | ![Development](https://img.shields.io/badge/-development-blue) |
 | `generate_content` | Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content) | ![Development](https://img.shields.io/badge/-development-blue) |
-| `handle_turn` | Handle one turn of a GenAI system, from when the agentic framework takes control flow until it releases control flow back to the caller | ![Development](https://img.shields.io/badge/-development-blue) |
+| `handle_conversation_turn` | Handle one conversation turn of a GenAI system, while the framework steers the control flow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_agent` | Invoke GenAI agent | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_workflow` | Invoke GenAI workflow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `plan` | Agent planning or task decomposition phase | ![Development](https://img.shields.io/badge/-development-blue) |
@@ -487,7 +487,7 @@ and SHOULD be provided **at span creation time** (if provided at all):
 | `execute_tool` | Execute a tool | ![Development](https://img.shields.io/badge/-development-blue) |
 | `fetch_response` | Fetch a previously generated model response by its identifier, without performing inference, such as [OpenAI Get a model response](https://platform.openai.com/docs/api-reference/responses/get) [33] | ![Development](https://img.shields.io/badge/-development-blue) |
 | `generate_content` | Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content) | ![Development](https://img.shields.io/badge/-development-blue) |
-| `handle_turn` | Handle one turn of a GenAI system, from when the agentic framework takes control flow until it releases control flow back to the caller | ![Development](https://img.shields.io/badge/-development-blue) |
+| `handle_conversation_turn` | Handle one conversation turn of a GenAI system, while the framework steers the control flow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_agent` | Invoke GenAI agent | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_workflow` | Invoke GenAI workflow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `plan` | Agent planning or task decomposition phase | ![Development](https://img.shields.io/badge/-development-blue) |
@@ -552,65 +552,56 @@ and SHOULD be provided **at span creation time** (if provided at all):
 
 **Status:** ![Development](https://img.shields.io/badge/-development-blue)
 
-Describes an in-process GenAI turn, workflow, or agent invocation.
+Describes an in-process GenAI conversation turn, workflow, or agent invocation.
 
-The `gen_ai.operation.name` SHOULD be one of:
+Instrumentations SHOULD set `gen_ai.operation.name` to:
 
-- `handle_turn`: one turn of a GenAI system, that is, one exchange with the caller (input
-  in, response out). Reported at a framework entrypoint that is a runner distinct from the
-  agents it runs, or where the framework defines the control flow between agents and an LLM
-  steers it (handoffs, transfers, swarms, or a manager LLM that routes). It starts when the
-  framework takes control flow and ends when the framework releases it back to the caller.
-  `gen_ai.agent.name` or `gen_ai.workflow.name` identifies the entry-point agent or workflow.
-- `invoke_workflow`: an application-defined control flow between steps, at any nesting depth
-  (for example, an application-defined LangGraph
+- `invoke_agent` when an LLM drives the control flow through tool calls, for example
+  LangChain [`create_agent`](https://docs.langchain.com/oss/python/langchain/agents), OpenAI
+  Agents [`Agent`](https://openai.github.io/openai-agents-python/agents/), CrewAI
+  [`Agent`](https://docs.crewai.com/concepts/agents), Microsoft Agent Framework
+  [`Agent`](https://learn.microsoft.com/agent-framework/), Pydantic AI `Agent`, and ADK
+  [`LlmAgent`](https://adk.dev/agents/llm-agents/).
+- `invoke_workflow` when the application defines the control flow, for example LangGraph
   [`StateGraph`](https://reference.langchain.com/python/langgraph/graphs), Microsoft Agent
   Framework [`Workflow`](https://learn.microsoft.com/agent-framework/workflows/) built with
   `WorkflowBuilder` edges, CrewAI [`Crew`](https://docs.crewai.com/concepts/crews) with
   `Process.sequential` or [`Flow`](https://docs.crewai.com/concepts/flows), and ADK
-  `Workflow`). It SHOULD NOT be reported when the workflow is an internal implementation
-  detail of another operation or a framework-defined multi-agent pattern.
-- `invoke_agent`: a single LLM-steered agent, at any nesting depth (for example, LangChain
-  [`create_agent`](https://docs.langchain.com/oss/python/langchain/agents), OpenAI Agents
-  [`Agent`](https://openai.github.io/openai-agents-python/agents/), CrewAI
-  [`Agent`](https://docs.crewai.com/concepts/agents), Microsoft Agent Framework
-  [`Agent`](https://learn.microsoft.com/agent-framework/), Pydantic AI `Agent`, and ADK
-  [`LlmAgent`](https://adk.dev/agents/llm-agents/)).
+  `Workflow`.
+- `handle_conversation_turn` if and only if all of the following hold:
+  1. the framework defines the control flow;
+  2. the span covers the time during which the framework steers the control flow, from when
+     it takes control flow from the caller until it releases it back;
+  3. without this span, the framework might not reliably produce exactly one invocation with
+     `gen_ai.invocation.is_nested` set to `false` per turn (for example, when agents hand off
+     to each other).
 
-When the framework entrypoint is itself an application-defined workflow or a single agent, a
-separate `handle_turn` span SHOULD NOT be reported; the top-level `invoke_workflow` or
-`invoke_agent` span represents the turn. Instrumentations can tell framework-defined
-multi-agent patterns from application-defined workflows using library state (for example,
-`crew.process`, or the builder or orchestration type that produced the graph or `Workflow`).
-Framework-specific semantic conventions SHOULD specify which entrypoints report each
-operation.
+  For example, ADK [`Runner.run(...)`](https://adk.dev/runtime/) /
+  `Runner.run_async(...)`, one OpenAI Agents
+  [`Runner.run(starting_agent=...)`](https://openai.github.io/openai-agents-python/ref/run/#agents.run.Runner.run)
+  call (the SDK's `task` span, not an SDK `turn`, which is one agent-loop iteration;
+  `RunConfig.workflow_name` is not recorded), LangGraph Swarm
+  `create_swarm([...]).compile().invoke(...)`, Microsoft Agent Framework
+  `HandoffBuilder(participants=[...]).build().run(...)`, CrewAI
+  `Crew(..., process=Process.hierarchical).kickoff()`, and AutoGen `Swarm([...]).run(...)`.
 
-Examples of `handle_turn` operations:
-
-- **ADK**: [`Runner.run(...)`](https://adk.dev/runtime/) / `Runner.run_async(...)`
-- **OpenAI Agents**: one [`Runner.run(starting_agent=...)`](https://openai.github.io/openai-agents-python/ref/run/#agents.run.Runner.run)
-  call (the SDK's `task` span, not one agent-loop iteration / SDK `turn` span as in
-  `max_turns`; `gen_ai.agent.name` is the starting agent, and `RunConfig.workflow_name` is
-  not recorded on `handle_turn`)
-- **LangGraph Swarm**: `create_swarm([...]).compile().invoke(...)`
-- **Microsoft Agent Framework**: `HandoffBuilder(participants=[...]).build().run(...)`
-- **CrewAI**: `Crew(..., process=Process.hierarchical).kickoff()`
-- **AutoGen**: `Swarm([...]).run(...)`
+Framework-specific semantic conventions SHOULD specify the operation for cases not covered
+above.
 
 Instrumentations SHOULD propagate an in-process OpenTelemetry context key when a turn begins
-so that a `handle_turn` span is never parented (directly or indirectly) by another
-`handle_turn` span in the same process (for example, a framework entrypoint invoked inside a
-tool or workflow step, such as OpenAI Agents `Agent.as_tool()`, ADK `AgentTool`, or an ADK
-runner invoked inside a LangGraph node). Cross-process propagation of turn state is out of
-scope.
+so that a `handle_conversation_turn` span is never parented (directly or indirectly) by
+another `handle_conversation_turn` span in the same process (for example, a framework
+entrypoint invoked inside a tool or workflow step, such as OpenAI Agents `Agent.as_tool()`,
+ADK `AgentTool`, or an ADK runner invoked inside a LangGraph node). Cross-process propagation
+of turn state is out of scope.
 
-Instrumentations MAY provide a configuration option to disable reporting the `handle_turn`
-span; its `gen_ai.invocation.duration` data point is still recorded.
+Instrumentations MAY provide a configuration option to disable reporting the
+`handle_conversation_turn` span; its `gen_ai.invocation.duration` data point is still
+recorded.
 
-**Span name** SHOULD be `{gen_ai.operation.name} {gen_ai.agent.name}` or
-`{gen_ai.operation.name} {gen_ai.workflow.name}`, naming the invoked agent or workflow
-(for `handle_turn`, the entry-point one). When neither name is readily available, the
-span name SHOULD be `{gen_ai.operation.name}`.
+**Span name** SHOULD be `{gen_ai.operation.name} {gen_ai.workflow.name}` when
+`gen_ai.workflow.name` is set, otherwise `{gen_ai.operation.name} {gen_ai.agent.name}` when
+`gen_ai.agent.name` is set, otherwise `{gen_ai.operation.name}`.
 Semantic conventions for individual GenAI systems and frameworks MAY specify a different
 span name format.
 
@@ -631,7 +622,7 @@ span name format.
 | [`gen_ai.operation.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Required` | string | The name of the operation being performed. [1] | `chat`; `generate_content`; `text_completion` |
 | [`error.type`](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/registry/attributes/error.md) | ![Stable](https://img.shields.io/badge/-stable-lightgreen) | `Conditionally Required` If the operation ended in an error. | string | Describes a class of error the operation ended with. [2] | `timeout`; `java.net.UnknownHostException`; `server_certificate_invalid`; `500` |
 | [`gen_ai.agent.description`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` When available. | string | The free-form description of the invoked GenAI agent. | `Helps with math problems`; `Generates fiction stories` |
-| [`gen_ai.agent.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [3] | string | The human-readable name of the invoked GenAI agent, or the entry-point agent when `gen_ai.operation.name` is `handle_turn`. | `Math Tutor`; `Fiction Writer` |
+| [`gen_ai.agent.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [3] | string | The human-readable name of the invoked GenAI agent, or the entry-point agent when `gen_ai.operation.name` is `handle_conversation_turn`. | `Math Tutor`; `Fiction Writer` |
 | [`gen_ai.conversation.id`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [4] | string | The unique identifier for a conversation (session, thread), used to store and correlate messages within this conversation. [5] | `conv_5j66UpCpwteGg4YSxUnt7lPY` |
 | [`gen_ai.data_source.id`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` If applicable. | string | The data source identifier. [6] | `H7STPQYOND` |
 | [`gen_ai.output.type`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [7] | string | Represents the content type requested by the client. [8] | `text`; `json`; `image` |
@@ -848,7 +839,7 @@ and SHOULD be provided **at span creation time** (if provided at all):
 | `execute_tool` | Execute a tool | ![Development](https://img.shields.io/badge/-development-blue) |
 | `fetch_response` | Fetch a previously generated model response by its identifier, without performing inference, such as [OpenAI Get a model response](https://platform.openai.com/docs/api-reference/responses/get) [19] | ![Development](https://img.shields.io/badge/-development-blue) |
 | `generate_content` | Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content) | ![Development](https://img.shields.io/badge/-development-blue) |
-| `handle_turn` | Handle one turn of a GenAI system, from when the agentic framework takes control flow until it releases control flow back to the caller | ![Development](https://img.shields.io/badge/-development-blue) |
+| `handle_conversation_turn` | Handle one conversation turn of a GenAI system, while the framework steers the control flow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_agent` | Invoke GenAI agent | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_workflow` | Invoke GenAI workflow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `plan` | Agent planning or task decomposition phase | ![Development](https://img.shields.io/badge/-development-blue) |
@@ -875,16 +866,16 @@ and SHOULD be provided **at span creation time** (if provided at all):
 <!-- END AUTOGENERATED TEXT -->
 <!-- endweaver -->
 
-The following table shows how `handle_turn`, `invoke_workflow`, and `invoke_agent` spans compose across different system architectures and frameworks:
+The following table shows how `handle_conversation_turn`, `invoke_workflow`, and `invoke_agent` spans compose across different system architectures and frameworks:
 
 | System architecture | Code sample | Trace hierarchy | Root span attributes |
 | --- | --- | --- | --- |
-| **Single agent with distinct framework runner**<br>*(ADK / OpenAI Agents)* | <pre># ADK<br>agent = LlmAgent(name="support", model="gemini-2.5-flash", ...)<br>runner = Runner(agent=agent, ...)<br>await runner.run_async(...)<br><br># OpenAI Agents<br>agent = Agent(name="support", model="gpt-4o", ...)<br>await Runner.run(agent, input="...")</pre> | <pre>handle_turn support<br>└── invoke_agent support<br>    └── generate_content gemini-2.5-flash  (OpenAI Agents: chat gpt-4o)</pre> | `gen_ai.operation.name = "handle_turn"`<br>`gen_ai.agent.name = "support"` |
-| **Multi-agent handoff with distinct framework runner**<br>*(ADK / OpenAI Agents)* | <pre># ADK<br>refunds = LlmAgent(name="refunds", ...)<br>triage = LlmAgent(name="triage", sub_agents=[refunds], ...)<br>await Runner(agent=triage, ...).run_async(...)<br><br># OpenAI Agents<br>refunds = Agent(name="refunds", ...)<br>triage = Agent(name="triage", handoffs=[refunds], ...)<br>await Runner.run(triage, input="...")</pre> | <pre>handle_turn triage<br>├── invoke_agent triage<br>│   ├── generate_content gemini-2.5-flash  (OpenAI Agents: chat gpt-4o)<br>│   └── execute_tool transfer_to_agent  (ADK)<br>└── invoke_agent refunds<br>    └── generate_content gemini-2.5-flash  (OpenAI Agents: chat gpt-4o)</pre> | `gen_ai.operation.name = "handle_turn"`<br>`gen_ai.agent.name = "triage"` |
-| **Framework-defined multi-agent pattern**<br>*(LangGraph Swarm / Microsoft Agent Framework `HandoffBuilder` / AutoGen `Swarm` / CrewAI `Process.hierarchical`)* | <pre># LangGraph Swarm<br>app = create_swarm([triage, refunds], default_active_agent="triage").compile()<br>await app.ainvoke(...)<br><br># Microsoft Agent Framework<br>workflow = HandoffBuilder(participants=[triage, refunds]).with_start_agent(triage).build()<br>await workflow.run(...)</pre> | <pre>handle_turn triage<br>├── invoke_agent triage<br>│   └── chat gpt-4o<br>└── invoke_agent refunds<br>    └── chat gpt-4o</pre> | `gen_ai.operation.name = "handle_turn"`<br>`gen_ai.agent.name = "triage"` |
-| **Workflow with distinct framework runner**<br>*(ADK — root `invoke_workflow` coalesced into `handle_turn`)* | <pre># ADK<br>gather = Workflow(name="gather", edges=[(START, (search, summarize))])<br>pipeline = Workflow(name="pipeline", edges=[(START, planner, gather)])<br>await Runner(agent=pipeline, ...).run_async(...)</pre> | <pre>handle_turn pipeline<br>├── invoke_agent planner<br>│   └── ...<br>└── invoke_workflow gather<br>    ├── invoke_agent search<br>    │   └── ...<br>    └── invoke_agent summarize<br>        └── ...</pre> | `gen_ai.operation.name = "handle_turn"`<br>`gen_ai.workflow.name = "pipeline"` |
-| **Application-defined workflow as the framework entrypoint**<br>*(LangGraph `StateGraph` / Microsoft Agent Framework `WorkflowBuilder` / CrewAI `Process.sequential` or `Flow` — no `handle_turn` span emitted)* | <pre># LangGraph<br>builder = StateGraph(State)<br>builder.add_node("planner", planner_agent)<br>builder.add_node("executor", executor_agent)<br>graph = builder.compile(name="pipeline")<br>await graph.ainvoke(...)<br><br># Microsoft Agent Framework<br>workflow = WorkflowBuilder(start_executor=planner, name="pipeline").add_edge(planner, executor).build()<br>await workflow.run(...)</pre> | <pre>invoke_workflow pipeline<br>├── invoke_agent planner<br>│   └── chat gpt-4o<br>└── invoke_agent executor<br>    └── chat gpt-4o</pre> | `gen_ai.operation.name = "invoke_workflow"`<br>`gen_ai.workflow.name = "pipeline"` |
-| **Single agent as the framework entrypoint**<br>*(LangChain / Microsoft Agent Framework / Pydantic AI — no `handle_turn` span emitted)* | <pre># Microsoft Agent Framework<br>agent = Agent(client=..., name="support", instructions="...")<br>await agent.run("...")<br><br># LangChain<br>agent = create_agent(model="gpt-4o", name="support", ...)<br>await agent.ainvoke(...)</pre> | <pre>invoke_agent support<br>└── chat gpt-4o</pre> | `gen_ai.operation.name = "invoke_agent"`<br>`gen_ai.agent.name = "support"` |
+| **Single agent with distinct framework runner**<br>*(ADK / OpenAI Agents)* | <pre># ADK<br>agent = LlmAgent(name="support", model="gemini-2.5-flash", ...)<br>runner = Runner(agent=agent, ...)<br>await runner.run_async(...)<br><br># OpenAI Agents<br>agent = Agent(name="support", model="gpt-4o", ...)<br>await Runner.run(agent, input="...")</pre> | <pre>handle_conversation_turn support<br>└── invoke_agent support<br>    └── generate_content gemini-2.5-flash  (OpenAI Agents: chat gpt-4o)</pre> | `gen_ai.operation.name = "handle_conversation_turn"`<br>`gen_ai.agent.name = "support"` |
+| **Multi-agent handoff with distinct framework runner**<br>*(ADK / OpenAI Agents)* | <pre># ADK<br>refunds = LlmAgent(name="refunds", ...)<br>triage = LlmAgent(name="triage", sub_agents=[refunds], ...)<br>await Runner(agent=triage, ...).run_async(...)<br><br># OpenAI Agents<br>refunds = Agent(name="refunds", ...)<br>triage = Agent(name="triage", handoffs=[refunds], ...)<br>await Runner.run(triage, input="...")</pre> | <pre>handle_conversation_turn triage<br>├── invoke_agent triage<br>│   ├── generate_content gemini-2.5-flash  (OpenAI Agents: chat gpt-4o)<br>│   └── execute_tool transfer_to_agent  (ADK)<br>└── invoke_agent refunds<br>    └── generate_content gemini-2.5-flash  (OpenAI Agents: chat gpt-4o)</pre> | `gen_ai.operation.name = "handle_conversation_turn"`<br>`gen_ai.agent.name = "triage"` |
+| **Framework-defined multi-agent pattern**<br>*(LangGraph Swarm / Microsoft Agent Framework `HandoffBuilder` / AutoGen `Swarm` / CrewAI `Process.hierarchical`)* | <pre># LangGraph Swarm<br>app = create_swarm([triage, refunds], default_active_agent="triage").compile()<br>await app.ainvoke(...)<br><br># Microsoft Agent Framework<br>workflow = HandoffBuilder(participants=[triage, refunds]).with_start_agent(triage).build()<br>await workflow.run(...)</pre> | <pre>handle_conversation_turn triage<br>├── invoke_agent triage<br>│   └── chat gpt-4o<br>└── invoke_agent refunds<br>    └── chat gpt-4o</pre> | `gen_ai.operation.name = "handle_conversation_turn"`<br>`gen_ai.agent.name = "triage"` |
+| **Workflow with distinct framework runner**<br>*(ADK)* | <pre># ADK<br>gather = Workflow(name="gather", edges=[(START, (search, summarize))])<br>pipeline = Workflow(name="pipeline", edges=[(START, planner, gather)])<br>await Runner(agent=pipeline, ...).run_async(...)</pre> | <pre>handle_conversation_turn pipeline<br>└── invoke_workflow pipeline<br>    ├── invoke_agent planner<br>    │   └── ...<br>    └── invoke_workflow gather<br>        ├── invoke_agent search<br>        │   └── ...<br>        └── invoke_agent summarize<br>            └── ...</pre> | `gen_ai.operation.name = "handle_conversation_turn"`<br>`gen_ai.workflow.name = "pipeline"` |
+| **Application-defined workflow as the framework entrypoint**<br>*(LangGraph `StateGraph` / Microsoft Agent Framework `WorkflowBuilder` / CrewAI `Process.sequential` or `Flow` — no `handle_conversation_turn` span emitted)* | <pre># LangGraph<br>builder = StateGraph(State)<br>builder.add_node("planner", planner_agent)<br>builder.add_node("executor", executor_agent)<br>graph = builder.compile(name="pipeline")<br>await graph.ainvoke(...)<br><br># Microsoft Agent Framework<br>workflow = WorkflowBuilder(start_executor=planner, name="pipeline").add_edge(planner, executor).build()<br>await workflow.run(...)</pre> | <pre>invoke_workflow pipeline<br>├── invoke_agent planner<br>│   └── chat gpt-4o<br>└── invoke_agent executor<br>    └── chat gpt-4o</pre> | `gen_ai.operation.name = "invoke_workflow"`<br>`gen_ai.workflow.name = "pipeline"` |
+| **Single agent as the framework entrypoint**<br>*(LangChain / Microsoft Agent Framework / Pydantic AI — no `handle_conversation_turn` span emitted)* | <pre># Microsoft Agent Framework<br>agent = Agent(client=..., name="support", instructions="...")<br>await agent.run("...")<br><br># LangChain<br>agent = create_agent(model="gpt-4o", name="support", ...)<br>await agent.ainvoke(...)</pre> | <pre>invoke_agent support<br>└── chat gpt-4o</pre> | `gen_ai.operation.name = "invoke_agent"`<br>`gen_ai.agent.name = "support"` |
 
 ### Plan span
 
@@ -966,7 +957,7 @@ and SHOULD be provided **at span creation time** (if provided at all):
 | `execute_tool` | Execute a tool | ![Development](https://img.shields.io/badge/-development-blue) |
 | `fetch_response` | Fetch a previously generated model response by its identifier, without performing inference, such as [OpenAI Get a model response](https://platform.openai.com/docs/api-reference/responses/get) [3] | ![Development](https://img.shields.io/badge/-development-blue) |
 | `generate_content` | Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content) | ![Development](https://img.shields.io/badge/-development-blue) |
-| `handle_turn` | Handle one turn of a GenAI system, from when the agentic framework takes control flow until it releases control flow back to the caller | ![Development](https://img.shields.io/badge/-development-blue) |
+| `handle_conversation_turn` | Handle one conversation turn of a GenAI system, while the framework steers the control flow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_agent` | Invoke GenAI agent | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_workflow` | Invoke GenAI workflow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `plan` | Agent planning or task decomposition phase | ![Development](https://img.shields.io/badge/-development-blue) |
@@ -1154,7 +1145,7 @@ and SHOULD be provided **at span creation time** (if provided at all):
 | `execute_tool` | Execute a tool | ![Development](https://img.shields.io/badge/-development-blue) |
 | `fetch_response` | Fetch a previously generated model response by its identifier, without performing inference, such as [OpenAI Get a model response](https://platform.openai.com/docs/api-reference/responses/get) [10] | ![Development](https://img.shields.io/badge/-development-blue) |
 | `generate_content` | Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content) | ![Development](https://img.shields.io/badge/-development-blue) |
-| `handle_turn` | Handle one turn of a GenAI system, from when the agentic framework takes control flow until it releases control flow back to the caller | ![Development](https://img.shields.io/badge/-development-blue) |
+| `handle_conversation_turn` | Handle one conversation turn of a GenAI system, while the framework steers the control flow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_agent` | Invoke GenAI agent | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_workflow` | Invoke GenAI workflow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `plan` | Agent planning or task decomposition phase | ![Development](https://img.shields.io/badge/-development-blue) |
@@ -1334,7 +1325,7 @@ and SHOULD be provided **at span creation time** (if provided at all):
 | `execute_tool` | Execute a tool | ![Development](https://img.shields.io/badge/-development-blue) |
 | `fetch_response` | Fetch a previously generated model response by its identifier, without performing inference, such as [OpenAI Get a model response](https://platform.openai.com/docs/api-reference/responses/get) [10] | ![Development](https://img.shields.io/badge/-development-blue) |
 | `generate_content` | Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content) | ![Development](https://img.shields.io/badge/-development-blue) |
-| `handle_turn` | Handle one turn of a GenAI system, from when the agentic framework takes control flow until it releases control flow back to the caller | ![Development](https://img.shields.io/badge/-development-blue) |
+| `handle_conversation_turn` | Handle one conversation turn of a GenAI system, while the framework steers the control flow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_agent` | Invoke GenAI agent | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_workflow` | Invoke GenAI workflow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `plan` | Agent planning or task decomposition phase | ![Development](https://img.shields.io/badge/-development-blue) |
@@ -1549,7 +1540,7 @@ and SHOULD be provided **at span creation time** (if provided at all):
 | `execute_tool` | Execute a tool | ![Development](https://img.shields.io/badge/-development-blue) |
 | `fetch_response` | Fetch a previously generated model response by its identifier, without performing inference, such as [OpenAI Get a model response](https://platform.openai.com/docs/api-reference/responses/get) [17] | ![Development](https://img.shields.io/badge/-development-blue) |
 | `generate_content` | Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content) | ![Development](https://img.shields.io/badge/-development-blue) |
-| `handle_turn` | Handle one turn of a GenAI system, from when the agentic framework takes control flow until it releases control flow back to the caller | ![Development](https://img.shields.io/badge/-development-blue) |
+| `handle_conversation_turn` | Handle one conversation turn of a GenAI system, while the framework steers the control flow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_agent` | Invoke GenAI agent | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_workflow` | Invoke GenAI workflow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `plan` | Agent planning or task decomposition phase | ![Development](https://img.shields.io/badge/-development-blue) |

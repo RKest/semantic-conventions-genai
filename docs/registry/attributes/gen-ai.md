@@ -134,10 +134,10 @@ Instrumentations MUST follow [JSON schema](/model/gen-ai/gen-ai-input-messages.j
 
 When the attribute is recorded on events, it MUST be recorded in structured form. When recorded on spans, it MAY be recorded as a JSON string if structured format is not supported and SHOULD be recorded in structured form otherwise.
 
-**[7] `gen_ai.invocation.is_nested`:** `false` on the root invocation of a turn in the process: `handle_turn`, or
-the top-level `invoke_workflow` or `invoke_agent` when the framework
-entrypoint is an application-defined workflow or a single agent. `true`
-on every invocation nested inside another in-process invocation.
+**[7] `gen_ai.invocation.is_nested`:** `false` on the root invocation of a turn in the process: the
+`handle_conversation_turn` invocation when reported, otherwise the
+top-level `invoke_workflow` or `invoke_agent` invocation. `true` on every
+invocation nested inside another in-process invocation.
 
 **[8] `gen_ai.main_agent.description`:** In Agent-to-Agent (A2A) communication, this maps to the `description` property declared in the Agent Card.
 
@@ -441,7 +441,7 @@ what `gen_ai.workflow.name` means in the context of that framework.
 | `execute_tool` | Execute a tool | ![Development](https://img.shields.io/badge/-development-blue) |
 | `fetch_response` | Fetch a previously generated model response by its identifier, without performing inference, such as [OpenAI Get a model response](https://platform.openai.com/docs/api-reference/responses/get) [54] | ![Development](https://img.shields.io/badge/-development-blue) |
 | `generate_content` | Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content) | ![Development](https://img.shields.io/badge/-development-blue) |
-| `handle_turn` | Handle one turn of a GenAI system, from when the agentic framework takes control flow until it releases control flow back to the caller | ![Development](https://img.shields.io/badge/-development-blue) |
+| `handle_conversation_turn` | Handle one conversation turn of a GenAI system, while the framework steers the control flow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_agent` | Invoke GenAI agent | ![Development](https://img.shields.io/badge/-development-blue) |
 | `invoke_workflow` | Invoke GenAI workflow | ![Development](https://img.shields.io/badge/-development-blue) |
 | `plan` | Agent planning or task decomposition phase | ![Development](https://img.shields.io/badge/-development-blue) |

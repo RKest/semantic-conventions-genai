@@ -551,67 +551,58 @@ spans:
     kind: internal
     name:
       note: |
-        **Span name** SHOULD be `{gen_ai.operation.name} {gen_ai.agent.name}` or
-        `{gen_ai.operation.name} {gen_ai.workflow.name}`, naming the invoked agent or workflow
-        (for `handle_turn`, the entry-point one). When neither name is readily available, the
-        span name SHOULD be `{gen_ai.operation.name}`.
+        **Span name** SHOULD be `{gen_ai.operation.name} {gen_ai.workflow.name}` when
+        `gen_ai.workflow.name` is set, otherwise `{gen_ai.operation.name} {gen_ai.agent.name}` when
+        `gen_ai.agent.name` is set, otherwise `{gen_ai.operation.name}`.
         Semantic conventions for individual GenAI systems and frameworks MAY specify a different
         span name format.
     brief: >
-      Describes an in-process GenAI turn, workflow, or agent invocation.
+      Describes an in-process GenAI conversation turn, workflow, or agent invocation.
     note: |
-      The `gen_ai.operation.name` SHOULD be one of:
+      Instrumentations SHOULD set `gen_ai.operation.name` to:
 
-      - `handle_turn`: one turn of a GenAI system, that is, one exchange with the caller (input
-        in, response out). Reported at a framework entrypoint that is a runner distinct from the
-        agents it runs, or where the framework defines the control flow between agents and an LLM
-        steers it (handoffs, transfers, swarms, or a manager LLM that routes). It starts when the
-        framework takes control flow and ends when the framework releases it back to the caller.
-        `gen_ai.agent.name` or `gen_ai.workflow.name` identifies the entry-point agent or workflow.
-      - `invoke_workflow`: an application-defined control flow between steps, at any nesting depth
-        (for example, an application-defined LangGraph
+      - `invoke_agent` when an LLM drives the control flow through tool calls, for example
+        LangChain [`create_agent`](https://docs.langchain.com/oss/python/langchain/agents), OpenAI
+        Agents [`Agent`](https://openai.github.io/openai-agents-python/agents/), CrewAI
+        [`Agent`](https://docs.crewai.com/concepts/agents), Microsoft Agent Framework
+        [`Agent`](https://learn.microsoft.com/agent-framework/), Pydantic AI `Agent`, and ADK
+        [`LlmAgent`](https://adk.dev/agents/llm-agents/).
+      - `invoke_workflow` when the application defines the control flow, for example LangGraph
         [`StateGraph`](https://reference.langchain.com/python/langgraph/graphs), Microsoft Agent
         Framework [`Workflow`](https://learn.microsoft.com/agent-framework/workflows/) built with
         `WorkflowBuilder` edges, CrewAI [`Crew`](https://docs.crewai.com/concepts/crews) with
         `Process.sequential` or [`Flow`](https://docs.crewai.com/concepts/flows), and ADK
-        `Workflow`). It SHOULD NOT be reported when the workflow is an internal implementation
-        detail of another operation or a framework-defined multi-agent pattern.
-      - `invoke_agent`: a single LLM-steered agent, at any nesting depth (for example, LangChain
-        [`create_agent`](https://docs.langchain.com/oss/python/langchain/agents), OpenAI Agents
-        [`Agent`](https://openai.github.io/openai-agents-python/agents/), CrewAI
-        [`Agent`](https://docs.crewai.com/concepts/agents), Microsoft Agent Framework
-        [`Agent`](https://learn.microsoft.com/agent-framework/), Pydantic AI `Agent`, and ADK
-        [`LlmAgent`](https://adk.dev/agents/llm-agents/)).
+        `Workflow`.
+      - `handle_conversation_turn` if and only if all of the following hold:
+        1. the framework defines the control flow;
+        2. the span covers the time during which the framework steers the control flow, from when
+           it takes control flow from the caller until it releases it back;
+        3. without this span, the framework might not reliably produce exactly one invocation with
+           `gen_ai.invocation.is_nested` set to `false` per turn (for example, when agents hand off
+           to each other).
 
-      When the framework entrypoint is itself an application-defined workflow or a single agent, a
-      separate `handle_turn` span SHOULD NOT be reported; the top-level `invoke_workflow` or
-      `invoke_agent` span represents the turn. Instrumentations can tell framework-defined
-      multi-agent patterns from application-defined workflows using library state (for example,
-      `crew.process`, or the builder or orchestration type that produced the graph or `Workflow`).
-      Framework-specific semantic conventions SHOULD specify which entrypoints report each
-      operation.
+        For example, ADK [`Runner.run(...)`](https://adk.dev/runtime/) /
+        `Runner.run_async(...)`, one OpenAI Agents
+        [`Runner.run(starting_agent=...)`](https://openai.github.io/openai-agents-python/ref/run/#agents.run.Runner.run)
+        call (the SDK's `task` span, not an SDK `turn`, which is one agent-loop iteration;
+        `RunConfig.workflow_name` is not recorded), LangGraph Swarm
+        `create_swarm([...]).compile().invoke(...)`, Microsoft Agent Framework
+        `HandoffBuilder(participants=[...]).build().run(...)`, CrewAI
+        `Crew(..., process=Process.hierarchical).kickoff()`, and AutoGen `Swarm([...]).run(...)`.
 
-      Examples of `handle_turn` operations:
-
-      - **ADK**: [`Runner.run(...)`](https://adk.dev/runtime/) / `Runner.run_async(...)`
-      - **OpenAI Agents**: one [`Runner.run(starting_agent=...)`](https://openai.github.io/openai-agents-python/ref/run/#agents.run.Runner.run)
-        call (the SDK's `task` span, not one agent-loop iteration / SDK `turn` span as in
-        `max_turns`; `gen_ai.agent.name` is the starting agent, and `RunConfig.workflow_name` is
-        not recorded on `handle_turn`)
-      - **LangGraph Swarm**: `create_swarm([...]).compile().invoke(...)`
-      - **Microsoft Agent Framework**: `HandoffBuilder(participants=[...]).build().run(...)`
-      - **CrewAI**: `Crew(..., process=Process.hierarchical).kickoff()`
-      - **AutoGen**: `Swarm([...]).run(...)`
+      Framework-specific semantic conventions SHOULD specify the operation for cases not covered
+      above.
 
       Instrumentations SHOULD propagate an in-process OpenTelemetry context key when a turn begins
-      so that a `handle_turn` span is never parented (directly or indirectly) by another
-      `handle_turn` span in the same process (for example, a framework entrypoint invoked inside a
-      tool or workflow step, such as OpenAI Agents `Agent.as_tool()`, ADK `AgentTool`, or an ADK
-      runner invoked inside a LangGraph node). Cross-process propagation of turn state is out of
-      scope.
+      so that a `handle_conversation_turn` span is never parented (directly or indirectly) by
+      another `handle_conversation_turn` span in the same process (for example, a framework
+      entrypoint invoked inside a tool or workflow step, such as OpenAI Agents `Agent.as_tool()`,
+      ADK `AgentTool`, or an ADK runner invoked inside a LangGraph node). Cross-process propagation
+      of turn state is out of scope.
 
-      Instrumentations MAY provide a configuration option to disable reporting the `handle_turn`
-      span; its `gen_ai.invocation.duration` data point is still recorded.
+      Instrumentations MAY provide a configuration option to disable reporting the
+      `handle_conversation_turn` span; its `gen_ai.invocation.duration` data point is still
+      recorded.
     stability: development
     entity_associations:
       - "gen_ai.main_agent"
@@ -624,7 +615,7 @@ spans:
       - ref: gen_ai.agent.name
         brief: >
           The human-readable name of the invoked GenAI agent, or the entry-point agent when
-          `gen_ai.operation.name` is `handle_turn`.
+          `gen_ai.operation.name` is `handle_conversation_turn`.
         requirement_level:
           conditionally_required: When the invoked or entry-point entity is an agent and the name is available.
         sampling_relevant: true

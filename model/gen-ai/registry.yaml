@@ -685,9 +685,9 @@ attributes:
           value: "invoke_workflow"
           brief: 'Invoke GenAI workflow'
           stability: development
-        - id: handle_turn
-          value: "handle_turn"
-          brief: 'Handle one turn of a GenAI system, from when the agentic framework takes control flow until it releases control flow back to the caller'
+        - id: handle_conversation_turn
+          value: "handle_conversation_turn"
+          brief: 'Handle one conversation turn of a GenAI system, while the framework steers the control flow'
           stability: development
         - id: plan
           value: "plan"
@@ -1097,10 +1097,10 @@ attributes:
       Whether an in-process GenAI invocation is nested within another
       in-process GenAI invocation.
     note: |
-      `false` on the root invocation of a turn in the process: `handle_turn`, or
-      the top-level `invoke_workflow` or `invoke_agent` when the framework
-      entrypoint is an application-defined workflow or a single agent. `true`
-      on every invocation nested inside another in-process invocation.
+      `false` on the root invocation of a turn in the process: the
+      `handle_conversation_turn` invocation when reported, otherwise the
+      top-level `invoke_workflow` or `invoke_agent` invocation. `true` on every
+      invocation nested inside another in-process invocation.
     examples: [false, true]
     stability: development
   - key: gen_ai.skill.name
